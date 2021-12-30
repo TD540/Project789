@@ -18,8 +18,7 @@ class ViewController: UIViewController {
         }
     }
     
-    @objc func newGame() {
-        guessAmount = 0
+    func getWord() {
         let url = URL(string: "https://random-word-api.herokuapp.com//word?number=1")!
         if let data = try? Data(contentsOf: url) {
             let decoder = JSONDecoder()
@@ -28,20 +27,15 @@ class ViewController: UIViewController {
                     print("The word is \(word)")
                     DispatchQueue.main.async { [weak self] in
                         guard let letterView = self?.letterView else { return }
-                        let height = 100
-                        let width = Int(letterView.frame.width) / word.count
-                        for (index, letter) in word.enumerated() {
-                            let label = UILabel()
-                            label.text = String(letter)
-                            let frame = CGRect(
-                                x: index * width,
-                                y: 0,
-                                width: width,
-                                height: height
-                            )
-                            label.frame = frame
-                            label.textAlignment = .center
-                            letterView.addSubview(label)
+                        var prevWidth: CGFloat = 0
+                        for (_, letter) in word.enumerated() {
+                            let letterLabel = UILabel()
+                            letterLabel.text = String(letter)
+                            letterLabel.sizeToFit()
+                            let frame = CGRect(x: prevWidth, y: 0, width: letterLabel.frame.width, height: letterLabel.frame.height)
+                            letterLabel.frame = frame
+                            prevWidth += letterLabel.frame.width
+                            letterView.addSubview(letterLabel)
                         }
                     }
                 }
@@ -49,17 +43,21 @@ class ViewController: UIViewController {
         }
     }
     
+    @objc func newGame() {
+        guessAmount = 0
+        getWord()
+    }
+    
     override func loadView() {
         view = UIView()
         view.backgroundColor = .systemBackground
-        letterView.translatesAutoresizingMaskIntoConstraints = false
+        letterView.backgroundColor = .red
+//        letterView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(letterView)
-        NSLayoutConstraint.activate([
-            letterView.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor),
-            letterView.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
-            letterView.widthAnchor.constraint(equalTo: view.layoutMarginsGuide.widthAnchor),
-            letterView.heightAnchor.constraint(equalToConstant: 100)
-        ])
+//        NSLayoutConstraint.activate([
+//            letterView.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor),
+//            letterView.centerXAnchor.constraint(equalTo: view.layoutMarginsGuide.centerXAnchor)
+//        ])
     }
 
     override func viewDidLoad() {
