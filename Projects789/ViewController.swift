@@ -7,60 +7,122 @@
 
 import UIKit
 
+class LetterField: UITextField {
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        return false
+    }
+}
+
 class ViewController: UIViewController {
-    let letterView = UILabel()
-    let guessesLeft = UILabel()
+    let incompleteWordLabel = UILabel()
+    let guessesLeftLabel = UILabel()
     let guessesView = UIView()
+    var guessLabels = [UILabel]()
     let guessButton = UIButton(type: .system)
-    let letterInput = UITextField()
-    let incorrectGuessesAllowed = 7
+    let letterInput = LetterField()
     
-    var word = String()
-    
-    var guesses = [Character]() {
+    var theWord = String() {
         didSet {
-            if let lastGuess = guesses.last {
-                if word.contains(lastGuess) {
-                    print("last guess = \(lastGuess)")
+            updateIncompleteWordLabel()
+        }
+    }
+    
+    func updateIncompleteWordLabel() {
+        if correctGuesses.isEmpty {
+            let count = theWord.count
+            DispatchQueue.main.async { [weak self] in
+                self?.incompleteWordLabel.text = String(repeating: "•", count: count)
+            }
+        } else {
+            var incompleteWord = ""
+            for letter in theWord {
+                if correctGuesses.contains(letter) {
+                    incompleteWord.append(letter)
+                } else {
+                    incompleteWord.append("•")
                 }
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.incompleteWordLabel.text = incompleteWord
             }
         }
     }
     
+    var correctGuesses = [Character]() {
+        didSet {
+            updateIncompleteWordLabel()
+        }
+    }
+    var allGuesses = [Character]() {
+        didSet {
+            guard let lastGuess = allGuesses.last else { return }
+            let correctGuess = theWord.contains(lastGuess)
+            if correctGuess {
+                correctGuesses.append(lastGuess)
+            } else {
+                incorrectGuessCount += 1
+                return
+            }
+            // Add label to guesses
+            let guessLabel = UILabel()
+            guessLabel.text = String(lastGuess)
+            guessLabel.textColor = correctGuess ? .systemGreen : .systemRed
+            guessLabel.translatesAutoresizingMaskIntoConstraints = false
+            guessesView.addSubview(guessLabel)
+            let leftAnchor = guessLabels.last?.rightAnchor ?? guessesView.leftAnchor
+            guessLabels.append(guessLabel)
+            NSLayoutConstraint.activate([
+                guessLabel.heightAnchor.constraint(equalTo: guessesView.heightAnchor),
+                guessLabel.leftAnchor.constraint(equalTo: leftAnchor, constant: 4)
+            ])
+        }
+    }
+    
+    let incorrectGuessesAllowed = 1
     var incorrectGuessCount = 0 {
         didSet {
             if incorrectGuessCount == incorrectGuessesAllowed {
-                incorrectGuessCount = 0
                 newGame()
+            } else {
+                let guessesLeft = incorrectGuessesAllowed - incorrectGuessCount
+                DispatchQueue.main.async { [weak self] in
+                    self?.guessesLeftLabel.text = "\(guessesLeft) incorrect guesses left"
+                }
             }
         }
     }
     
     @objc func newGame() {
+        print("@TD: new game")
+        incorrectGuessCount = 0
+        guessLabels.removeAll()
+        allGuesses.removeAll()
+        for label in guessLabels {
+            label.removeFromSuperview()
+        }
+        
         let url = URL(string: "https://random-word-api.herokuapp.com//word?number=1")!
         if let data = try? Data(contentsOf: url) {
             let decoder = JSONDecoder()
             if let randomWord = try? decoder.decode([String].self, from: data) {
                 if let randomWord = randomWord.first {
-                    word = randomWord
-                    print("The word is \(word)")
-                    let count = word.count
-                    DispatchQueue.main.async { [weak self] in
-                        self?.letterView.text = String(repeating: "?", count: count)
-                    }
+                    theWord = randomWord
+                    print("@TD: The word is \(theWord)")
                 }
             }
         }
     }
     
-    /// Make textfield accept only one letter
-    @objc private func letterInputChanged(sender: UITextField) {
+    /// Make textfield accept only one unguessed letter as input
+    @objc func letterInputChanged(sender: UITextField) {
         guard let input = sender.text else { return }
         switch input.count {
+        case 0:
+            guessButton.isEnabled = false
         case 1:
             // user adds first input
             let firstInput = input.lowercased().first!
-            if firstInput.isLetter && !guesses.contains(firstInput) {
+            if firstInput.isLetter && !allGuesses.contains(firstInput) {
                 sender.text = String(firstInput)
                 guessButton.isEnabled = true
             } else {
@@ -71,25 +133,27 @@ class ViewController: UIViewController {
             let firstInput = input.lowercased().first!
             let secondInput = input.lowercased().last!
             // check if second input is valid
-            if secondInput.isLetter && !guesses.contains(secondInput) {
+            if secondInput.isLetter && !allGuesses.contains(secondInput) {
                 sender.text = String(secondInput)
             } else {
                 sender.text = String(firstInput)
             }
         default:
-            guessButton.isEnabled = false
+            // user tried pasting in more than 2 letters,
+            // which is not allowed, so:
+            sender.text = nil
         }
     }
 
     override func loadView() {
         view = UIView()
         view.backgroundColor = .systemBackground
-        letterView.translatesAutoresizingMaskIntoConstraints = false
-        letterView.font = UIFont.systemFont(ofSize: 50)
-        view.addSubview(letterView)
-        guessesLeft.translatesAutoresizingMaskIntoConstraints = false
-        guessesLeft.text = "\(incorrectGuessesAllowed - incorrectGuessCount) guesses left"
-        view.addSubview(guessesLeft)
+        incompleteWordLabel.translatesAutoresizingMaskIntoConstraints = false
+        incompleteWordLabel.font = UIFont.systemFont(ofSize: 50)
+        view.addSubview(incompleteWordLabel)
+        guessesLeftLabel.translatesAutoresizingMaskIntoConstraints = false
+        guessesLeftLabel.textColor = .tertiaryLabel
+        view.addSubview(guessesLeftLabel)
         guessesView.translatesAutoresizingMaskIntoConstraints = false
         guessesView.layer.borderWidth = 2
         guessesView.layer.borderColor = UIColor.tertiarySystemFill.cgColor
@@ -108,11 +172,11 @@ class ViewController: UIViewController {
         guessButton.addTarget(self, action: #selector(guessButtonTapped), for: .touchUpInside)
         view.addSubview(guessButton)
         NSLayoutConstraint.activate([
-            letterView.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor),
-            letterView.centerXAnchor.constraint(equalTo: view.layoutMarginsGuide.centerXAnchor),
-            guessesLeft.topAnchor.constraint(equalTo: letterView.bottomAnchor),
-            guessesLeft.centerXAnchor.constraint(equalTo: letterView.centerXAnchor),
-            guessesView.topAnchor.constraint(equalTo: guessesLeft.bottomAnchor, constant: 10),
+            incompleteWordLabel.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor),
+            incompleteWordLabel.centerXAnchor.constraint(equalTo: view.layoutMarginsGuide.centerXAnchor),
+            guessesLeftLabel.topAnchor.constraint(equalTo: incompleteWordLabel.bottomAnchor),
+            guessesLeftLabel.centerXAnchor.constraint(equalTo: incompleteWordLabel.centerXAnchor),
+            guessesView.topAnchor.constraint(equalTo: guessesLeftLabel.bottomAnchor, constant: 10),
             guessesView.centerXAnchor.constraint(equalTo: view.layoutMarginsGuide.centerXAnchor),
             guessesView.widthAnchor.constraint(equalTo: view.layoutMarginsGuide.widthAnchor),
             guessesView.heightAnchor.constraint(equalToConstant: 50),
@@ -125,17 +189,10 @@ class ViewController: UIViewController {
     }
     
     @objc func guessButtonTapped(_ sender: UIButton) {
-        if let letter = letterInput.text {
-            if letter.isEmpty == false {
-                let guess = Character(letter)
-                if guesses.contains(guess) == false {
-                    print("Guessing \(guess)")
-                    guesses.append(guess)
-                }
-                letterInput.text = nil
-                guessButton.isEnabled = false
-            }
-        }
+        guard let guess = letterInput.text?.first else { return }
+        allGuesses.append(guess)
+        letterInput.text = nil
+        guessButton.isEnabled = false
     }
     
     override func viewDidLoad() {
