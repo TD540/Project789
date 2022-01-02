@@ -60,10 +60,14 @@ class ViewController: UIViewController {
             if completeWord == inCompleteWord {
                 score += 1
                 let ac = UIAlertController(title: "You found \"\(completeWord)\"", message: "Score: \(score)", preferredStyle: .alert)
-                ac.addAction(UIAlertAction(title: "Give me another", style: .default, handler: nil))
-                performSelector(inBackground: #selector(newGame), with: nil)
+                ac.addAction(UIAlertAction(title: "Give me another", style: .default, handler: nextGame))
+                present(ac, animated: true)
             }
         }
+    }
+    
+    func nextGame(action: UIAlertAction) {
+        performSelector(inBackground: #selector(newGame), with: nil)
     }
     
     var usedLetters = [Character]() {
@@ -102,7 +106,9 @@ class ViewController: UIViewController {
     var wrongAnswers = 0 {
         didSet {
             if wrongAnswers == wrongAnswersAllowed {
-                performSelector(inBackground: #selector(newGame), with: nil)
+                let ac = UIAlertController(title: "GAME OVER!", message: "The word was \"\(completeWord)\".\nScore: \(score)", preferredStyle: .alert)
+                ac.addAction(UIAlertAction(title: "Give me another", style: .default, handler: nextGame))
+                present(ac, animated: true)
             } else {
                 let guessesLeft = wrongAnswersAllowed - wrongAnswers
                 DispatchQueue.main.async { [weak self] in
