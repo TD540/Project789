@@ -14,54 +14,74 @@ class LetterField: UITextField {
 }
 
 class ViewController: UIViewController {
+    var score = 0
+    var inCompleteWord: String? {
+        didSet {
+            DispatchQueue.main.async { [weak self] in
+                self?.incompleteWordLabel.text = self?.inCompleteWord
+            }
+        }
+    }
     let incompleteWordLabel = UILabel()
     let guessesLeftLabel = UILabel()
     let guessesView = UIView()
-    var guessLabels = [UILabel]()
+    var guessLabels = [UILabel]() {
+        willSet {
+            if newValue.isEmpty {
+                let labels = guessLabels
+                DispatchQueue.main.async {
+                    for label in labels {
+                        label.removeFromSuperview()
+                    }
+                }
+            }
+        }
+    }
     let guessButton = UIButton(type: .system)
     let letterInput = LetterField()
     
-    var theWord = String() {
+    var completeWord = String() {
         didSet {
-            updateIncompleteWordLabel()
+            inCompleteWord = String(repeating: "•", count: completeWord.count)
         }
     }
     
-    func updateIncompleteWordLabel() {
-        if correctGuesses.isEmpty {
-            let count = theWord.count
-            DispatchQueue.main.async { [weak self] in
-                self?.incompleteWordLabel.text = String(repeating: "•", count: count)
-            }
-        } else {
-            var incompleteWord = ""
-            for letter in theWord {
-                if correctGuesses.contains(letter) {
-                    incompleteWord.append(letter)
+    var correctLetters = [Character]() {
+        didSet {
+            var newIncompleteWord = ""
+            for letter in completeWord {
+                if correctLetters.contains(letter) {
+                    newIncompleteWord.append(letter)
                 } else {
-                    incompleteWord.append("•")
+                    newIncompleteWord.append("•")
                 }
             }
-            DispatchQueue.main.async { [weak self] in
-                self?.incompleteWordLabel.text = incompleteWord
+            inCompleteWord = newIncompleteWord
+            if completeWord == inCompleteWord {
+                score += 1
+                let ac = UIAlertController(title: "You found \"\(completeWord)\"", message: "Score: \(score)", preferredStyle: .alert)
+                ac.addAction(UIAlertAction(title: "Give me another", style: .default, handler: nil))
+                performSelector(inBackground: #selector(newGame), with: nil)
             }
         }
     }
     
-    var correctGuesses = [Character]() {
-        didSet {
-            updateIncompleteWordLabel()
+    var usedLetters = [Character]() {
+        willSet {
+            if newValue.isEmpty && !correctLetters.isEmpty {
+                correctLetters.removeAll()
+            }
         }
-    }
-    var allGuesses = [Character]() {
         didSet {
-            guard let lastGuess = allGuesses.last else { return }
-            let correctGuess = theWord.contains(lastGuess)
+            guard let lastGuess = usedLetters.last else { return }
+            let correctGuess = completeWord.contains(lastGuess)
             if correctGuess {
-                correctGuesses.append(lastGuess)
+                correctLetters.append(lastGuess)
             } else {
-                incorrectGuessCount += 1
-                return
+                wrongAnswers += 1
+                if wrongAnswers == wrongAnswersAllowed {
+                    return
+                }
             }
             // Add label to guesses
             let guessLabel = UILabel()
@@ -78,13 +98,13 @@ class ViewController: UIViewController {
         }
     }
     
-    let incorrectGuessesAllowed = 1
-    var incorrectGuessCount = 0 {
+    let wrongAnswersAllowed = 7
+    var wrongAnswers = 0 {
         didSet {
-            if incorrectGuessCount == incorrectGuessesAllowed {
-                newGame()
+            if wrongAnswers == wrongAnswersAllowed {
+                performSelector(inBackground: #selector(newGame), with: nil)
             } else {
-                let guessesLeft = incorrectGuessesAllowed - incorrectGuessCount
+                let guessesLeft = wrongAnswersAllowed - wrongAnswers
                 DispatchQueue.main.async { [weak self] in
                     self?.guessesLeftLabel.text = "\(guessesLeft) incorrect guesses left"
                 }
@@ -93,21 +113,16 @@ class ViewController: UIViewController {
     }
     
     @objc func newGame() {
-        print("@TD: new game")
-        incorrectGuessCount = 0
+        wrongAnswers = 0
         guessLabels.removeAll()
-        allGuesses.removeAll()
-        for label in guessLabels {
-            label.removeFromSuperview()
-        }
-        
+        usedLetters.removeAll()
         let url = URL(string: "https://random-word-api.herokuapp.com//word?number=1")!
         if let data = try? Data(contentsOf: url) {
             let decoder = JSONDecoder()
             if let randomWord = try? decoder.decode([String].self, from: data) {
                 if let randomWord = randomWord.first {
-                    theWord = randomWord
-                    print("@TD: The word is \(theWord)")
+                    completeWord = randomWord
+                    print("The word is \(randomWord)")
                 }
             }
         }
@@ -122,7 +137,7 @@ class ViewController: UIViewController {
         case 1:
             // user adds first input
             let firstInput = input.lowercased().first!
-            if firstInput.isLetter && !allGuesses.contains(firstInput) {
+            if firstInput.isLetter && !usedLetters.contains(firstInput) {
                 sender.text = String(firstInput)
                 guessButton.isEnabled = true
             } else {
@@ -133,7 +148,7 @@ class ViewController: UIViewController {
             let firstInput = input.lowercased().first!
             let secondInput = input.lowercased().last!
             // check if second input is valid
-            if secondInput.isLetter && !allGuesses.contains(secondInput) {
+            if secondInput.isLetter && !usedLetters.contains(secondInput) {
                 sender.text = String(secondInput)
             } else {
                 sender.text = String(firstInput)
@@ -190,7 +205,7 @@ class ViewController: UIViewController {
     
     @objc func guessButtonTapped(_ sender: UIButton) {
         guard let guess = letterInput.text?.first else { return }
-        allGuesses.append(guess)
+        usedLetters.append(guess)
         letterInput.text = nil
         guessButton.isEnabled = false
     }
